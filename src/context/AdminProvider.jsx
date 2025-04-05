@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from "react";
+import socket from "../config/socket";
 import { useLocation } from "react-router-dom";
 import clienteAxios from "../config/clienteAxios";
 import Cookies from "js-cookie";
@@ -94,6 +95,44 @@ export const AdminProvider = ({ children }) => {
       return () => clearInterval(intervalo);
     }
   }, [citaHoy, location.pathname]);
+
+  // Escuchar nuevas citas desde el backend vía socket
+  useEffect(() => {
+    socket.on('nueva-cita', (nuevaCita) => {
+      console.log('🟢 Cita recibida por socket:', nuevaCita);
+
+      setCitaSemana(prev => [...prev, nuevaCita]);
+
+      // Si coincide con la fecha del calendario actual, actualizar en orden
+      if (nuevaCita.fecha === fechaCalendario) {
+        setCitaCalendario(prev => {
+          const actualizadas = [...prev, nuevaCita].sort((a, b) => {
+            const horaA = Number((a.hora?.hora || '').replace(':', ''));
+            const horaB = Number((b.hora?.hora || '').replace(':', ''));
+            return horaA - horaB;
+          });
+          return actualizadas;
+        });
+      }
+
+      // Si la cita es para hoy, también actualizar en orden
+      const fechaHoyLocal = formatInTimeZone(new Date(), 'Europe/Madrid', 'yyyy-MM-dd');
+      if (nuevaCita.fecha === fechaHoyLocal) {
+        setCitaHoy(prev => {
+          const actualizadas = [...prev, nuevaCita].sort((a, b) => {
+            const horaA = Number((a.hora?.hora || '').replace(':', ''));
+            const horaB = Number((b.hora?.hora || '').replace(':', ''));
+            return horaA - horaB;
+          });
+          return actualizadas;
+        });
+      }
+    });
+
+    return () => {
+      socket.off('nueva-cita');
+    };
+  }, [fechaCalendario]);
 
   // COMPLETAR / ELIMINAR CITA
   const completarCita = async (citaID, horaID, fecha) => {
