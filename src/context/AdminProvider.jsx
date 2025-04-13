@@ -98,41 +98,67 @@ export const AdminProvider = ({ children }) => {
 
   // Escuchar nuevas citas desde el backend vía socket
   useEffect(() => {
-    socket.on('nueva-cita', (nuevaCita) => {
-      console.log('🟢 Cita recibida por socket:', nuevaCita);
+    if (token) {
+      const handleNuevaCita = (nuevaCita) => {
+        console.log('Cita recibida por socket:', nuevaCita);
 
-      setCitaSemana(prev => [...prev, nuevaCita]);
+        setCitaSemana(prev => [...prev, nuevaCita]);
 
-      // Si coincide con la fecha del calendario actual, actualizar en orden
-      if (nuevaCita.fecha === fechaCalendario) {
-        setCitaCalendario(prev => {
-          const actualizadas = [...prev, nuevaCita].sort((a, b) => {
-            const horaA = Number((a.hora?.hora || '').replace(':', ''));
-            const horaB = Number((b.hora?.hora || '').replace(':', ''));
-            return horaA - horaB;
+        if (nuevaCita.fecha === fechaCalendario) {
+          setCitaCalendario(prev => {
+            const actualizadas = [...prev, nuevaCita].sort((a, b) => {
+              const horaA = Number((a.hora?.hora || '').replace(':', ''));
+              const horaB = Number((b.hora?.hora || '').replace(':', ''));
+              return horaA - horaB;
+            });
+            return actualizadas;
           });
-          return actualizadas;
-        });
+        }
+
+        const fechaHoyLocal = formatInTimeZone(new Date(), 'Europe/Madrid', 'yyyy-MM-dd');
+        if (nuevaCita.fecha === fechaHoyLocal) {
+          setCitaHoy(prev => {
+            const actualizadas = [...prev, nuevaCita].sort((a, b) => {
+              const horaA = Number((a.hora?.hora || '').replace(':', ''));
+              const horaB = Number((b.hora?.hora || '').replace(':', ''));
+              return horaA - horaB;
+            });
+            return actualizadas;
+          });
+        }
+      };
+
+      const handleActualizarHorarios = async () => {
+        await obtenerHorarios()
       }
 
-      // Si la cita es para hoy, también actualizar en orden
-      const fechaHoyLocal = formatInTimeZone(new Date(), 'Europe/Madrid', 'yyyy-MM-dd');
-      if (nuevaCita.fecha === fechaHoyLocal) {
-        setCitaHoy(prev => {
-          const actualizadas = [...prev, nuevaCita].sort((a, b) => {
-            const horaA = Number((a.hora?.hora || '').replace(':', ''));
-            const horaB = Number((b.hora?.hora || '').replace(':', ''));
-            return horaA - horaB;
-          });
-          return actualizadas;
-        });
-      }
-    });
+      socket.on("nueva-cita", handleNuevaCita);
+      socket.on("actualizar-horarios", handleActualizarHorarios);
 
-    return () => {
-      socket.off('nueva-cita');
-    };
-  }, [fechaCalendario]);
+      // Listener para errores de conexión (¡MUY útil para depurar!)
+      socket.on('connect_error', (err) => {
+        console.error(`SOCKET Connect Error: ${err.message}`, err);
+      });
+
+      // Listener para desconexiones
+      socket.on('disconnect', (reason) => {
+        console.warn(`SOCKET Desconectado: ${reason}`);
+      });
+
+      // Listener para reconexiones exitosas (opcional pero útil)
+      socket.on('connect', () => {
+        console.log('SOCKET Re-conectado:', socket.id);
+      });
+
+      return () => {
+        console.log('SOCKET: Eliminando listener para nueva-cita');
+        socket.off('nueva-cita', handleNuevaCita);
+        socket.off('connect_error');
+        socket.off('disconnect');
+        socket.off('connect');
+      };
+    }
+  }, [token, fechaCalendario]);
 
   // COMPLETAR / ELIMINAR CITA
   const completarCita = async (citaID, horaID, fecha) => {
@@ -233,8 +259,8 @@ export const AdminProvider = ({ children }) => {
         const newHorarios = [...prevHorarios, data];
 
         return newHorarios.sort((a, b) => {
-          const [horaA, minA] = a.hora?.hora.split(":").map(Number) || [0, 0];
-          const [horaB, minB] = b.hora?.hora.split(":").map(Number) || [0, 0];
+          const [horaA, minA] = a.hora?.split(":").map(Number) || [0, 0];
+          const [horaB, minB] = b.hora?.split(":").map(Number) || [0, 0];
 
           return horaA !== horaB ? horaA - horaB : minA - minB;
         });
@@ -249,12 +275,24 @@ export const AdminProvider = ({ children }) => {
 
     console.log(horario)
     try {
-      const { data } = await clienteAxios.put(`/horarios/${horario._id}`, horario);
+      await clienteAxios.put(`/horarios/${horario.id}`, horario);
 
       obtenerHorarios();
 
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  // ELIMINAR HORARIO
+  const eliminarHorario = async (id) => {
+    try {
+      await clienteAxios.delete(`/horarios/${id}`);
+      setHorarios(prevHorarios => prevHorarios.filter(horario => horario._id !== id));
+      console.log("Horario eliminado:", id);
+      obtenerHorarios();
+    } catch (error) {
+      console.error("Error al eliminar horario:", error);
     }
   };
 
@@ -277,7 +315,8 @@ export const AdminProvider = ({ children }) => {
         obtenerHorarios,
         horarioParaActualizar,
         setHorarioParaActualizar,
-        actualizarHorario
+        actualizarHorario,
+        eliminarHorario,
       }}
     >
       {children}
