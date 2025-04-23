@@ -13,7 +13,7 @@ export default defineConfig({
         short_name: 'Barbershop',
         description: 'Panel de administración de la Barbería',
         theme_color: '#ffffff',
-        background_color: '#ffffff',
+        background_color: '#000000',
         display: 'standalone',
         scope: '/',
         start_url: '/admin',
