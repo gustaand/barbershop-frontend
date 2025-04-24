@@ -1,7 +1,7 @@
 
 import { io } from 'socket.io-client';
 
-const SOCKET_SERVER_URL = 'http://192.168.1.143:4000';
+const SOCKET_SERVER_URL = 'https://barbershop-backend-jgst.onrender.com';
 
 console.log(`Intentando conectar a: ${SOCKET_SERVER_URL}`);
 
